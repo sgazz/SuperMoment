@@ -9,8 +9,8 @@ from typing import List, Optional
 import aiofiles
 import uuid
 
-from auth import authenticate_user, create_access_token, verify_token, create_user, ACCESS_TOKEN_EXPIRE_MINUTES
-from models import UserLogin, UserCreate, LoginResponse, RegisterResponse, User
+from auth import authenticate_user, create_access_token, verify_token, create_user, authenticate_apple_user, authenticate_google_user, ACCESS_TOKEN_EXPIRE_MINUTES
+from models import UserLogin, UserCreate, LoginResponse, RegisterResponse, User, AppleSignInRequest, GoogleSignInRequest
 
 app = FastAPI(
     title="SuperMoment API",
@@ -117,6 +117,64 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Logout endpoint (client should discard token)"""
     return {"message": "Successfully logged out"}
+
+@app.post("/auth/apple", response_model=LoginResponse)
+async def apple_sign_in(apple_data: AppleSignInRequest):
+    """Apple Sign In endpoint"""
+    try:
+        user = authenticate_apple_user(apple_data.identity_token, apple_data.authorization_code)
+        
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user["email"]}, expires_delta=access_token_expires
+        )
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            "user": {
+                "email": user["email"],
+                "full_name": user["full_name"],
+                "role": user["role"],
+                "is_active": user["is_active"]
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Apple Sign In failed",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+@app.post("/auth/google", response_model=LoginResponse)
+async def google_sign_in(google_data: GoogleSignInRequest):
+    """Google Sign In endpoint"""
+    try:
+        user = authenticate_google_user(google_data.id_token, google_data.access_token)
+        
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user["email"]}, expires_delta=access_token_expires
+        )
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            "user": {
+                "email": user["email"],
+                "full_name": user["full_name"],
+                "role": user["role"],
+                "is_active": user["is_active"]
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google Sign In failed",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 async def get_current_user_dependency(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Dependency to get current user"""

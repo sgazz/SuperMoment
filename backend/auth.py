@@ -4,6 +4,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import HTTPException, status
 import os
+import uuid
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -102,7 +103,7 @@ def create_user(email: str, password: str, full_name: str, role: str = "user"):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User already exists"
         )
-    
+
     hashed_password = get_password_hash(password)
     user = {
         "email": email,
@@ -113,3 +114,39 @@ def create_user(email: str, password: str, full_name: str, role: str = "user"):
     }
     users_db[email] = user
     return user
+
+def authenticate_apple_user(identity_token: str, authorization_code: str):
+    """Authenticate Apple user (placeholder implementation)"""
+    # TODO: Implement real Apple Sign In verification
+    # For now, create a demo Apple user
+    apple_email = f"apple_user_{uuid.uuid4().hex[:8]}@supermoment.com"
+    
+    if apple_email not in users_db:
+        user = {
+            "email": apple_email,
+            "hashed_password": "",  # No password for OAuth users
+            "full_name": "Apple User",
+            "role": "user",
+            "is_active": True
+        }
+        users_db[apple_email] = user
+    
+    return users_db[apple_email]
+
+def authenticate_google_user(id_token: str, access_token: str):
+    """Authenticate Google user (placeholder implementation)"""
+    # TODO: Implement real Google Sign In verification
+    # For now, create a demo Google user
+    google_email = f"google_user_{uuid.uuid4().hex[:8]}@supermoment.com"
+    
+    if google_email not in users_db:
+        user = {
+            "email": google_email,
+            "hashed_password": "",  # No password for OAuth users
+            "full_name": "Google User",
+            "role": "user",
+            "is_active": True
+        }
+        users_db[google_email] = user
+    
+    return users_db[google_email]

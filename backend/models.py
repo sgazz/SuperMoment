@@ -40,3 +40,11 @@ class LoginResponse(BaseModel):
 class RegisterResponse(BaseModel):
     message: str
     user: User
+
+class AppleSignInRequest(BaseModel):
+    identity_token: str
+    authorization_code: str
+
+class GoogleSignInRequest(BaseModel):
+    id_token: str
+    access_token: str
