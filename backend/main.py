@@ -1,12 +1,16 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 import aiofiles
 import uuid
+
+from auth import authenticate_user, create_access_token, verify_token, create_user, ACCESS_TOKEN_EXPIRE_MINUTES
+from models import UserLogin, UserCreate, LoginResponse, RegisterResponse, User
 
 app = FastAPI(
     title="SuperMoment API",
@@ -23,6 +27,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Security
+security = HTTPBearer()
+
 # In-memory storage for MVP (will be database later)
 events = {}
 vouchers = {}
@@ -38,13 +45,90 @@ async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
+# Authentication endpoints
+@app.post("/auth/login", response_model=LoginResponse)
+async def login(user_credentials: UserLogin):
+    """Login endpoint"""
+    user = authenticate_user(user_credentials.email, user_credentials.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user["email"]}, expires_delta=access_token_expires
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        "user": {
+            "email": user["email"],
+            "full_name": user["full_name"],
+            "role": user["role"],
+            "is_active": user["is_active"]
+        }
+    }
+
+@app.post("/auth/register", response_model=RegisterResponse)
+async def register(user_data: UserCreate):
+    """Register new user endpoint"""
+    try:
+        user = create_user(
+            email=user_data.email,
+            password=user_data.password,
+            full_name=user_data.full_name,
+            role=user_data.role
+        )
+        
+        return {
+            "message": "User created successfully",
+            "user": User(
+                email=user["email"],
+                full_name=user["full_name"],
+                role=user["role"],
+                is_active=user["is_active"]
+            )
+        }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create user"
+        )
+
+@app.get("/auth/me")
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Get current user information"""
+    user = verify_token(credentials.credentials)
+    return {
+        "email": user["email"],
+        "full_name": user["full_name"],
+        "role": user["role"],
+        "is_active": user["is_active"]
+    }
+
+@app.post("/auth/logout")
+async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Logout endpoint (client should discard token)"""
+    return {"message": "Successfully logged out"}
+
+async def get_current_user_dependency(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Dependency to get current user"""
+    return verify_token(credentials.credentials)
+
 @app.post("/events/create")
 async def create_event(
     name: str = Form(...),
     description: str = Form(...),
     location: str = Form(...),
     date: str = Form(...),
-    admin_user_id: str = Form(...)
+    current_user: dict = Depends(get_current_user_dependency)
 ):
     """Creates a new event"""
     event_id = str(uuid.uuid4())
@@ -55,7 +139,7 @@ async def create_event(
         "description": description,
         "location": location,
         "date": date,
-        "admin_user_id": admin_user_id,
+        "admin_user_id": current_user["email"],
         "status": "active",
         "created_at": datetime.now().isoformat(),
         "participants": [],
@@ -78,10 +162,10 @@ async def get_event(event_id: str):
 async def upload_media(
     event_id: str,
     file: UploadFile = File(...),
-    user_id: str = Form(...),
     latitude: float = Form(...),
     longitude: float = Form(...),
-    timestamp: str = Form(...)
+    timestamp: str = Form(...),
+    current_user: dict = Depends(get_current_user_dependency)
 ):
     """Uploads media file for an event"""
     if event_id not in events:
@@ -107,7 +191,7 @@ async def upload_media(
         "id": str(uuid.uuid4()),
         "file_id": file_id,
         "filename": filename,
-        "user_id": user_id,
+        "user_id": current_user["email"],
         "latitude": latitude,
         "longitude": longitude,
         "timestamp": timestamp,
@@ -141,8 +225,8 @@ async def get_moments(event_id: str, user_id: Optional[str] = None):
 @app.post("/vouchers/create")
 async def create_voucher(
     event_id: str = Form(...),
-    admin_user_id: str = Form(...),
-    max_participants: int = Form(...)
+    max_participants: int = Form(...),
+    current_user: dict = Depends(get_current_user_dependency)
 ):
     """Creates a new voucher for an event"""
     voucher_id = str(uuid.uuid4())
@@ -150,7 +234,7 @@ async def create_voucher(
     voucher = {
         "id": voucher_id,
         "event_id": event_id,
-        "admin_user_id": admin_user_id,
+        "admin_user_id": current_user["email"],
         "max_participants": max_participants,
         "participants": [],
         "status": "active",

@@ -3,6 +3,15 @@
 # SuperMoment Universal Launcher
 # Combines all functionalities in one file
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Change to the SuperMoment directory
+cd "$SCRIPT_DIR"
+
+echo "📍 Working directory: $(pwd)"
+echo ""
+
 # Function to check status
 check_status() {
     echo "🔍 Checking service status..."
@@ -223,10 +232,11 @@ show_menu() {
     echo "3️⃣  🔍 Check status"
     echo "4️⃣  🛑 Stop services"
     echo "5️⃣  🔄 Restart services"
-    echo "6️⃣  📚 Open API documentation"
-    echo "7️⃣  🎨 Open frontend admin"
-    echo "8️⃣  🔧 Open backend API"
-    echo "9️⃣  ❌ Exit"
+            echo "6️⃣  📚 Open API documentation"
+        echo "7️⃣  🎨 Open frontend admin"
+        echo "8️⃣  🔧 Open backend API"
+        echo "9️⃣  🔐 Open login page"
+        echo "0️⃣  ❌ Exit"
     echo ""
 }
 
@@ -234,7 +244,7 @@ show_menu() {
 main() {
     while true; do
         show_menu
-        read -p "Enter option number (1-9): " choice
+        read -p "Enter option number (1-9, 0): " choice
         
         case $choice in
             1)
@@ -289,6 +299,14 @@ main() {
                 read -p "Press Enter to return to menu..."
                 ;;
             9)
+                echo ""
+                echo "🔐 Opening login page..."
+                open http://localhost:3000/login
+                echo "✅ Login page opened in browser."
+                echo ""
+                read -p "Press Enter to return to menu..."
+                ;;
+            0)
                 echo ""
                 echo "👋 Goodbye!"
                 exit 0
