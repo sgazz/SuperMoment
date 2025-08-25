@@ -10,7 +10,8 @@ import aiofiles
 import uuid
 
 from auth import authenticate_user, create_access_token, verify_token, create_user, authenticate_apple_user, authenticate_google_user, ACCESS_TOKEN_EXPIRE_MINUTES
-from models import UserLogin, UserCreate, LoginResponse, RegisterResponse, User, AppleSignInRequest, GoogleSignInRequest
+from models import UserLogin, UserCreate, LoginResponse, RegisterResponse, User, AppleSignInRequest, GoogleSignInRequest, EventCreate, EventUpdate, EventList, Event, VoucherCreate, VoucherUpdate, VoucherList, VoucherRedeem, VoucherRedeemResponse, Voucher
+from events import create_event, get_event, get_events_by_admin, get_all_events, update_event, delete_event, create_voucher, get_vouchers_by_event, redeem_voucher, get_user_events
 
 app = FastAPI(
     title="SuperMoment API",
@@ -320,6 +321,110 @@ async def join_voucher(voucher_id: str, user_id: str = Form(...)):
     voucher["participants"].append(user_id)
     
     return {"message": "Successfully joined voucher"}
+
+# Event Management Endpoints
+@app.post("/events", response_model=Event)
+async def create_new_event(
+    event_data: EventCreate,
+    current_user: dict = Depends(get_current_user_dependency)
+):
+    """Create a new event"""
+    event = await create_event(event_data, current_user["email"])
+    return event.model_dump()
+
+@app.get("/events", response_model=EventList)
+async def list_events(
+    current_user: dict = Depends(get_current_user_dependency),
+    admin_only: bool = False
+):
+    """List events - admin's events or all events user participates in"""
+    if admin_only:
+        events = await get_events_by_admin(current_user["email"])
+    else:
+        events = await get_user_events(current_user["email"])
+    
+    return EventList(events=events, total=len(events))
+
+@app.get("/events/all", response_model=EventList)
+async def list_all_events(
+    current_user: dict = Depends(get_current_user_dependency)
+):
+    """List all events (admin only)"""
+    if current_user["role"] != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can view all events"
+        )
+    
+    events = await get_all_events()
+    return EventList(events=events, total=len(events))
+
+@app.get("/events/{event_id}", response_model=Event)
+async def get_event_by_id(
+    event_id: str,
+    current_user: dict = Depends(get_current_user_dependency)
+):
+    """Get event by ID"""
+    event = await get_event(event_id)
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found"
+        )
+    
+    # Check if user is participant or admin
+    participants = await get_user_events(current_user["email"])
+    if event not in participants and event.admin_email != current_user["email"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied"
+        )
+    
+    return event
+
+@app.put("/events/{event_id}", response_model=Event)
+async def update_event_by_id(
+    event_id: str,
+    event_data: EventUpdate,
+    current_user: dict = Depends(get_current_user_dependency)
+):
+    """Update an event"""
+    return await update_event(event_id, event_data, current_user["email"])
+
+@app.delete("/events/{event_id}")
+async def delete_event_by_id(
+    event_id: str,
+    current_user: dict = Depends(get_current_user_dependency)
+):
+    """Delete an event"""
+    success = await delete_event(event_id, current_user["email"])
+    return {"message": "Event deleted successfully"}
+
+# Voucher Management Endpoints
+@app.post("/vouchers", response_model=Voucher)
+async def create_new_voucher(
+    voucher_data: VoucherCreate,
+    current_user: dict = Depends(get_current_user_dependency)
+):
+    """Create a new voucher for an event"""
+    return await create_voucher(voucher_data, current_user["email"])
+
+@app.get("/vouchers/event/{event_id}", response_model=VoucherList)
+async def list_vouchers_for_event(
+    event_id: str,
+    current_user: dict = Depends(get_current_user_dependency)
+):
+    """List all vouchers for an event"""
+    vouchers = await get_vouchers_by_event(event_id, current_user["email"])
+    return VoucherList(vouchers=vouchers, total=len(vouchers))
+
+@app.post("/vouchers/redeem", response_model=VoucherRedeemResponse)
+async def redeem_voucher_code(
+    voucher_data: VoucherRedeem,
+    current_user: dict = Depends(get_current_user_dependency)
+):
+    """Redeem a voucher code"""
+    return await redeem_voucher(voucher_data.voucher_code, current_user["email"])
 
 if __name__ == "__main__":
     import uvicorn
