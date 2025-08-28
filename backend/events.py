@@ -31,12 +31,21 @@ async def create_event(event_data: EventCreate, admin_email: str) -> Event:
     event_id = str(uuid.uuid4())
     now = datetime.utcnow()
     
+    # Create event with all required fields
     event = Event(
         id=event_id,
         admin_email=admin_email,
         created_at=now,
         updated_at=now,
-        **event_data.model_dump()
+        title=event_data.title,
+        description=event_data.description,
+        location=event_data.location,
+        latitude=event_data.latitude,
+        longitude=event_data.longitude,
+        event_date=event_data.event_date,
+        max_participants=event_data.max_participants,
+        status=event_data.status,
+        participant_count=0
     )
     
     events_db[event_id] = event

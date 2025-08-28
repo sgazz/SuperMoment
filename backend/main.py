@@ -104,7 +104,7 @@ async def register(user_data: UserCreate):
         )
 
 @app.get("/auth/me")
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def get_current_user_info(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Get current user information"""
     user = verify_token(credentials.credentials)
     return {
@@ -177,37 +177,11 @@ async def google_sign_in(google_data: GoogleSignInRequest):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-async def get_current_user_dependency(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Dependency to get current user"""
     return verify_token(credentials.credentials)
 
-@app.post("/events/create")
-async def create_event(
-    name: str = Form(...),
-    description: str = Form(...),
-    location: str = Form(...),
-    date: str = Form(...),
-    current_user: dict = Depends(get_current_user_dependency)
-):
-    """Creates a new event"""
-    event_id = str(uuid.uuid4())
-    
-    event = {
-        "id": event_id,
-        "name": name,
-        "description": description,
-        "location": location,
-        "date": date,
-        "admin_user_id": current_user["email"],
-        "status": "active",
-        "created_at": datetime.now().isoformat(),
-        "participants": [],
-        "moments": []
-    }
-    
-    events[event_id] = event
-    
-    return {"event_id": event_id, "event": event}
+
 
 @app.get("/events/{event_id}")
 async def get_event(event_id: str):
@@ -224,7 +198,7 @@ async def upload_media(
     latitude: float = Form(...),
     longitude: float = Form(...),
     timestamp: str = Form(...),
-    current_user: dict = Depends(get_current_user_dependency)
+    current_user: dict = Depends(get_current_user)
 ):
     """Uploads media file for an event"""
     if event_id not in events:
@@ -285,7 +259,7 @@ async def get_moments(event_id: str, user_id: Optional[str] = None):
 async def create_voucher(
     event_id: str = Form(...),
     max_participants: int = Form(...),
-    current_user: dict = Depends(get_current_user_dependency)
+    current_user: dict = Depends(get_current_user)
 ):
     """Creates a new voucher for an event"""
     voucher_id = str(uuid.uuid4())
@@ -305,7 +279,7 @@ async def create_voucher(
     return {"voucher_id": voucher_id, "voucher": voucher}
 
 @app.post("/vouchers/{voucher_id}/join")
-async def join_voucher(voucher_id: str, user_id: str = Form(...)):
+async def join_voucher_endpoint(voucher_id: str, user_id: str = Form(...)):
     """Joins a user to a voucher"""
     if voucher_id not in vouchers:
         raise HTTPException(status_code=404, detail="Voucher not found")
@@ -326,7 +300,7 @@ async def join_voucher(voucher_id: str, user_id: str = Form(...)):
 @app.post("/events", response_model=Event)
 async def create_new_event(
     event_data: EventCreate,
-    current_user: dict = Depends(get_current_user_dependency)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new event"""
     event = await create_event(event_data, current_user["email"])
@@ -334,7 +308,7 @@ async def create_new_event(
 
 @app.get("/events", response_model=EventList)
 async def list_events(
-    current_user: dict = Depends(get_current_user_dependency),
+    current_user: dict = Depends(get_current_user),
     admin_only: bool = False
 ):
     """List events - admin's events or all events user participates in"""
@@ -347,7 +321,7 @@ async def list_events(
 
 @app.get("/events/all", response_model=EventList)
 async def list_all_events(
-    current_user: dict = Depends(get_current_user_dependency)
+    current_user: dict = Depends(get_current_user)
 ):
     """List all events (admin only)"""
     if current_user["role"] != "admin":
@@ -362,7 +336,7 @@ async def list_all_events(
 @app.get("/events/{event_id}", response_model=Event)
 async def get_event_by_id(
     event_id: str,
-    current_user: dict = Depends(get_current_user_dependency)
+    current_user: dict = Depends(get_current_user)
 ):
     """Get event by ID"""
     event = await get_event(event_id)
@@ -386,7 +360,7 @@ async def get_event_by_id(
 async def update_event_by_id(
     event_id: str,
     event_data: EventUpdate,
-    current_user: dict = Depends(get_current_user_dependency)
+    current_user: dict = Depends(get_current_user)
 ):
     """Update an event"""
     return await update_event(event_id, event_data, current_user["email"])
@@ -394,7 +368,7 @@ async def update_event_by_id(
 @app.delete("/events/{event_id}")
 async def delete_event_by_id(
     event_id: str,
-    current_user: dict = Depends(get_current_user_dependency)
+    current_user: dict = Depends(get_current_user)
 ):
     """Delete an event"""
     success = await delete_event(event_id, current_user["email"])
@@ -404,7 +378,7 @@ async def delete_event_by_id(
 @app.post("/vouchers", response_model=Voucher)
 async def create_new_voucher(
     voucher_data: VoucherCreate,
-    current_user: dict = Depends(get_current_user_dependency)
+    current_user: dict = Depends(get_current_user)
 ):
     """Create a new voucher for an event"""
     return await create_voucher(voucher_data, current_user["email"])
@@ -412,7 +386,7 @@ async def create_new_voucher(
 @app.get("/vouchers/event/{event_id}", response_model=VoucherList)
 async def list_vouchers_for_event(
     event_id: str,
-    current_user: dict = Depends(get_current_user_dependency)
+    current_user: dict = Depends(get_current_user)
 ):
     """List all vouchers for an event"""
     vouchers = await get_vouchers_by_event(event_id, current_user["email"])
@@ -421,7 +395,7 @@ async def list_vouchers_for_event(
 @app.post("/vouchers/redeem", response_model=VoucherRedeemResponse)
 async def redeem_voucher_code(
     voucher_data: VoucherRedeem,
-    current_user: dict = Depends(get_current_user_dependency)
+    current_user: dict = Depends(get_current_user)
 ):
     """Redeem a voucher code"""
     return await redeem_voucher(voucher_data.voucher_code, current_user["email"])

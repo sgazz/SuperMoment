@@ -32,6 +32,13 @@ users_db = {
         "full_name": "Test User",
         "role": "user",
         "is_active": True
+    },
+    "demo@example.com": {
+        "email": "demo@example.com",
+        "hashed_password": pwd_context.hash("demo123"),
+        "full_name": "Demo User",
+        "role": "user",
+        "is_active": True
     }
 }
 
